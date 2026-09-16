@@ -315,13 +315,3 @@ All REST endpoints reside under the `/api/books` path:
 | `DELETE` | `/api/books/{id}` | Remove a book by ID | `200 OK` |
 | `POST` | `/api/books/{id}/checkout` | Check out a book (decreases quantity by 1) | `200 OK` |
 
----
-
-## Submission Checklist Compliance
-
-- [x] **Source code organized into 3 folders**: `/presentation`, `/business`, `/data`.
-- [x] **Short architecture diagram**: Available in [architecture_diagram.md](architecture_diagram.md) and [architecture_diagram.png](architecture_diagram.png).
-- [x] **README.md**: Includes instructions to run, tier descriptions, and design decision justification paragraph.
-- [x] **At least 5 unit tests for Business Logic tier with fake/mock data source**: 9 unit tests in [tests/test_business_mock.py](tests/test_business_mock.py) using `InMemoryBookRepository` (no real database).
-- [x] **Swap Test**: Implemented in [swap_test.py](swap_test.py) and [tests/test_swap.py](tests/test_swap.py) comparing SQLite vs In-Memory List.
-- [x] **Zero layer violations**: Presentation never queries DB; Business tier never imports DB; Data tier has no validation or display logic.
