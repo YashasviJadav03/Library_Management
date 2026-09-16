@@ -1,6 +1,6 @@
-"""Repositories package."""
+"""Data Repositories package."""
+from data.repositories.interfaces import IBookRepository
 from data.repositories.book_repository import BookRepository
-from data.repositories.member_repository import MemberRepository
-from data.repositories.borrow_repository import BorrowRepository
+from data.repositories.memory_repository import InMemoryBookRepository
 
-__all__ = ["BookRepository", "MemberRepository", "BorrowRepository"]
+__all__ = ["IBookRepository", "BookRepository", "InMemoryBookRepository"]

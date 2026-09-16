@@ -1,77 +1,36 @@
-# Library Management System (3-Tier Architecture)
+# 3-Tier Architecture Library Management Application
 
-A robust, enterprise-grade **Library Management System** built with **Python FastAPI**, strictly structured using the **3-Tier (N-Tier) Architectural Pattern**.
+A complete, production-ready **3-Tier "Library Management" Application** built with **Python FastAPI** and **SQLite/SQLAlchemy**, adhering strictly to the **3-Tier / N-Tier Architecture** pattern.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-red.svg)](https://www.sqlalchemy.org/)
-[![Tests](https://img.shields.io/badge/tests-24%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-17%20passed-brightgreen.svg)]()
 
 ---
 
 ## Table of Contents
 
-- [Architectural Overview](#architectural-overview)
+- [Overview & Learning Objectives](#overview--learning-objectives)
 - [Project Directory Structure](#project-directory-structure)
+- [Tier Descriptions (Separation of Concerns)](#tier-descriptions-separation-of-concerns)
+- [Design Decision Justification](#design-decision-justification)
 - [Architecture Diagram](#architecture-diagram)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Running the Application](#running-the-application)
-- [API Documentation & Endpoints](#api-documentation--endpoints)
-- [Core Business Rules](#core-business-rules)
-- [Running Automated Tests](#running-automated-tests)
-- [Submission Compliance](#submission-compliance)
+- [Features & Business Rules](#features--business-rules)
+- [Step-by-Step Guide: How to Run the System](#step-by-step-guide-how-to-run-the-system)
+  - [Where is the output shown?](#where-is-the-output-shown)
+- [Running the Swap Test (Data Layer Independence)](#running-the-swap-test-data-layer-independence)
+- [Running Automated Unit & Integration Tests](#running-automated-unit--integration-tests)
+- [API Reference](#api-reference)
 
 ---
 
-## Architectural Overview
+## Overview & Learning Objectives
 
-The application strictly decouples concerns across three distinct layers:
-
-```text
-+-------------------------------------------------------------------------+
-|                  1. PRESENTATION TIER (/presentation)                   |
-|  * FastAPI REST API Routers (/api/books, /api/members, /api/borrow)     |
-|  * Pydantic DTO Request/Response Schemas & Validation                   |
-|  * HTTP Status Code & Exception Mapping (400, 404, 409)                 |
-+------------------------------------+------------------------------------+
-                                     | Calls Service Methods
-                                     v
-+-------------------------------------------------------------------------+
-|                     2. BUSINESS TIER (/business)                        |
-|  * Domain Services (BookService, MemberService, BorrowService)          |
-|  * Business Rules (Limits, Quotas, Stock Validation, Late Fines)       |
-|  * Decoupled Domain Exceptions (Framework Independent)                  |
-+------------------------------------+------------------------------------+
-                                     | Uses Repositories
-                                     v
-+-------------------------------------------------------------------------+
-|                        3. DATA TIER (/data)                             |
-|  * Repository Pattern (BookRepository, MemberRepository, etc.)          |
-|  * SQLAlchemy ORM Entity Models (Book, Member, BorrowRecord)            |
-|  * Database Engine & Session Management (SQLite / PostgreSQL)           |
-+------------------------------------+------------------------------------+
-                                     | SQL / Persistence
-                                     v
-+-------------------------------------------------------------------------+
-|                         SQLITE DATABASE ENGINE                          |
-+-------------------------------------------------------------------------+
-```
-
-1. **Presentation Tier (`/presentation`)**:
-   - Manages client interactions, deserializes request payloads, serializes responses, and routes HTTP requests.
-   - Converts domain-level business exceptions into clean RESTful HTTP status codes (e.g., `404 Not Found`, `409 Conflict`, `400 Bad Request`).
-
-2. **Business Tier (`/business`)**:
-   - Contains all core business policies, domain constraints, and workflow coordination.
-   - Independent of HTTP libraries and UI concerns.
-   - Enforces inventory checks, active borrowing quotas, return deadlines, and overdue fines calculations.
-
-3. **Data Tier (`/data`)**:
-   - Isolates all database operations using the **Repository Pattern**.
-   - Handles SQLAlchemy ORM mappings, transaction sessions, and persistent SQLite storage.
+This assignment demonstrates a clean **separation of concerns** across architectural layers:
+- **Presentation Tier** (`/presentation`): Handles input/output and user interaction only. No business rules. No direct database calls.
+- **Business Tier** (`/business`): Contains all validation and business rules. Never imports database libraries directly — depends only on the abstract `IBookRepository` interface.
+- **Data Tier** (`/data`): Handles reading/writing data only. No validation logic. No display logic.
 
 ---
 
@@ -81,225 +40,288 @@ The application strictly decouples concerns across three distinct layers:
 Library_Management/
 ├── presentation/                 # TIER 1: Presentation Layer
 │   ├── __init__.py
-│   ├── main.py                   # FastAPI Application & Global Exception Handlers
-│   ├── schemas.py                # Pydantic DTOs for Request / Response
-│   └── routes/                   # API Route Controllers
+│   ├── main.py                   # FastAPI Application, Web UI, & Global Error Mapping
+│   ├── schemas.py                # Pydantic DTO Schemas (Request/Response validation)
+│   └── routes/
 │       ├── __init__.py
-│       ├── book_routes.py        # /api/books endpoints
-│       ├── member_routes.py      # /api/members endpoints
-│       └── borrow_routes.py      # /api/borrow & /api/borrow/return endpoints
+│       └── book_routes.py        # REST API Endpoints (/api/books)
 │
 ├── business/                     # TIER 2: Business Logic Layer
 │   ├── __init__.py
-│   ├── exceptions.py             # Domain-specific Exceptions
-│   └── services/                 # Business Services
-│       ├── __init__.py
-│       ├── book_service.py       # Catalog Rules & Inventory Logic
-│       ├── member_service.py     # Membership Quotas & Validation
-│       └── borrow_service.py     # Checkout, Return, & Fine Calculations
+│   ├── book_service.py           # Core Domain Service & Rule Enforcement
+│   └── exceptions.py             # Pure Domain Exceptions (Decoupled from HTTP)
 │
 ├── data/                         # TIER 3: Data Access Layer
 │   ├── __init__.py
-│   ├── database.py               # Engine, Base, & SessionLocal setup
-│   ├── models.py                 # SQLAlchemy ORM Entities (Book, Member, BorrowRecord)
-│   └── repositories/             # Repository Pattern
+│   ├── database.py               # Engine, SessionLocal, & Base configuration
+│   ├── models.py                 # SQLAlchemy ORM Model (Book)
+│   └── repositories/
 │       ├── __init__.py
-│       ├── book_repository.py    # CRUD & Filter Queries for Books
-│       ├── member_repository.py  # CRUD Queries for Members
-│       └── borrow_repository.py  # CRUD Queries for Borrow Records
+│       ├── interfaces.py         # Abstract IBookRepository Contract
+│       ├── book_repository.py    # Implementation A: SQLite / SQLAlchemy
+│       └── memory_repository.py  # Implementation B: Pure In-Memory List
 │
 ├── tests/                        # Automated Tests Layer
 │   ├── __init__.py
-│   ├── conftest.py               # In-Memory SQLite Fixture & TestClient
-│   ├── test_data_layer.py        # Data Tier Repositories Unit Tests
-│   ├── test_business_layer.py    # Business Tier Services & Rules Unit Tests
-│   └── test_presentation_layer.py# Presentation Tier API Integration Tests
+│   ├── conftest.py               # Test fixtures (isolated SQLite + TestClient)
+│   ├── test_business_mock.py    # Unit tests with Fake/Mock data layer (NO DATABASE)
+│   ├── test_data_layer.py        # SQLite Repository tests
+│   ├── test_presentation_layer.py# REST API Integration tests
+│   └── test_swap.py              # Pytest verification of data layer swap
 │
-├── architecture_diagram.md       # Detailed Architecture Specification & Mermaid Diagrams
-├── architecture_diagram.png      # Visual Architecture Diagram
-├── requirements.txt              # Project Dependencies
-├── run.py                        # Application Startup Launcher
+├── architecture_diagram.md       # Architecture specification with ASCII & Mermaid
+├── architecture_diagram.png      # High-resolution visual architecture graphic
+├── requirements.txt              # Project dependencies
+├── run.py                        # Entry-point runner script
+├── swap_test.py                  # Standalone executable Swap Test demonstration
+├── .gitignore                    # Git ignore file
 └── README.md                     # Documentation
 ```
 
 ---
 
+## Tier Descriptions (Separation of Concerns)
+
+### 1. Presentation Tier (`/presentation`)
+- **What it does**: Exposes the user interface and HTTP REST API. It receives client input, parses JSON bodies/query parameters using Pydantic DTO schemas, invokes the appropriate business service method, and serializes domain objects into JSON or HTML responses.
+- **Strict Boundary**: It contains **zero business rules** and makes **no direct database calls**. It maps domain exceptions (`ValidationError`, `OutOfStockError`, `BookNotFoundError`, `DuplicateISBNError`) into standard HTTP status codes (`400 Bad Request`, `404 Not Found`, `409 Conflict`).
+
+### 2. Business Tier (`/business`)
+- **What it does**: Contains all validation logic, domain invariants, and use cases in `BookService`.
+- **Strict Boundary**: It **never imports database libraries directly** (no SQLAlchemy, no sqlite3). It interacts with the data layer exclusively through the `IBookRepository` interface. If validation fails, it raises pure Python domain exceptions (`BusinessRuleException` subclasses) without any HTTP framework dependencies.
+
+### 3. Data Tier (`/data`)
+- **What it does**: Manages persistent storage and retrieval. Contains entity models (`Book`) and repository implementations:
+  - `BookRepository`: Uses SQLAlchemy ORM to query/persist records into SQLite (`library.db`).
+  - `InMemoryBookRepository`: Uses pure Python dictionaries and lists for testing and data-layer swapping.
+- **Strict Boundary**: Contains **no validation rules** (it trusts the business layer) and **no presentation/display knowledge**.
+
+---
+
+## Design Decision Justification
+
+> **Design Decision:**  
+> I used the **Repository Interface Pattern** (`IBookRepository`) to invert the dependency between the Business Logic Tier and the Data Access Tier (adhering to the *Dependency Inversion Principle*). By programming the `BookService` strictly to an abstract interface rather than a concrete SQLite or SQLAlchemy session, the business logic remains 100% decoupled from storage technology. This enabled us to implement two interchangeable data layer versions—a persistent SQLite repository (`BookRepository`) and an in-memory list/dictionary repository (`InMemoryBookRepository`). As demonstrated in our unit tests and `swap_test.py`, this allows the business logic to run identically against either data source without altering a single line of business tier code, while enabling fast, isolated unit testing that does not touch a real database.
+
+---
+
 ## Architecture Diagram
 
-The architecture is documented in [architecture_diagram.md](architecture_diagram.md) and visually depicted below:
+The architecture is detailed in [architecture_diagram.md](architecture_diagram.md) and illustrated below:
 
 ![3-Tier Architecture Diagram](architecture_diagram.png)
 
+```text
++-----------------------------------------------------------------------------------+
+|                        1. PRESENTATION TIER (/presentation)                       |
+|  * Interactive Web Dashboard (http://localhost:8000/)                             |
+|  * Interactive Swagger Docs (http://localhost:8000/docs)                          |
+|  * REST API Routers (/api/books) & Pydantic DTO Schemas                           |
++-----------------------------------------+-----------------------------------------+
+                                          | Calls Service methods (DTO payloads)
+                                          v
++-----------------------------------------------------------------------------------+
+|                         2. BUSINESS TIER (/business)                              |
+|  * BookService: Validation rules, stock decrement, checkout limits                |
+|  * Pure Domain Exceptions (ValidationError, OutOfStockError, BookNotFoundError)   |
++-----------------------------------------+-----------------------------------------+
+                                          | Calls abstract IBookRepository contract
+                                          v
++-----------------------------------------------------------------------------------+
+|                           3. DATA TIER (/data)                                    |
+|  * IBookRepository (Abstract Interface)                                           |
+|  * Version 1: BookRepository (SQLAlchemy + SQLite)                                |
+|  * Version 2: InMemoryBookRepository (Pure In-Memory List/Dict)                   |
++-----------------------------------------+-----------------------------------------+
+                                          | SQL / In-Memory operations
+                                          v
++-----------------------------------------------------------------------------------+
+|                   SQLite Database (.db)   OR   In-Memory Store                    |
++-----------------------------------------------------------------------------------+
+```
+
 ---
 
-## Tech Stack
+## Features & Business Rules
 
-- **Language**: Python 3.10+
-- **Web Framework**: FastAPI (High performance, OpenAPI/Swagger support)
-- **ASGI Server**: Uvicorn
-- **ORM & Database**: SQLAlchemy 2.0+ with SQLite (Persistent `library.db` or In-Memory `:memory:`)
-- **Validation**: Pydantic v2
-- **Testing**: Pytest & HTTPX TestClient
+### Implemented Features
+1. **Add a Book**: Title, Author, ISBN, Publication Year, Quantity.
+2. **View All Books**: List all books currently in the collection.
+3. **Search Books**: Partial, case-insensitive match on Title or Author.
+4. **Update a Book**: Edit any field of an existing book.
+5. **Delete a Book**: Remove a book by ID.
+6. **Check Out a Book**: Decrease quantity by 1 (must not go below 0).
+
+### Enforced Business Rules (in `business/book_service.py`)
+- **Title and Author cannot be empty**: Raises `ValidationError` if whitespace or blank.
+- **Publication Year must be valid**: Cannot be in the future (compared to current UTC year).
+- **ISBN must be exactly 10 or 13 digits**: Validated after stripping hyphens.
+- **Quantity cannot be negative**: Must be $\ge 0$.
+- **Check out guard**: Cannot check out a book if quantity is already 0; raises `OutOfStockError` with a clear message rather than crashing.
 
 ---
 
-## Getting Started
+## Step-by-Step Guide: How to Run the System
 
-### Prerequisites
+### Step 1: Install Dependencies
+Ensure Python 3.10+ is installed, then run:
+```bash
+pip install -r requirements.txt
+```
 
-- Python 3.10 or higher installed.
-
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/YashasviJadav03/Library_Management.git
-   cd Library_Management
-   ```
-
-2. **Create and activate a virtual environment**:
-   - **Windows (PowerShell)**:
-     ```powershell
-     python -m venv venv
-     .\venv\Scripts\Activate.ps1
-     ```
-   - **Linux / macOS**:
-     ```bash
-     python -m venv venv
-     source venv/bin/activate
-     ```
-
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-### Running the Application
-
-Launch the server using the entry point runner:
+### Step 2: Start the Application
+Run the launcher script:
 ```bash
 python run.py
 ```
+*Terminal output:*
+```text
+Starting Library Management System on http://127.0.0.1:8000
+Interactive API Documentation: http://127.0.0.1:8000/docs
+INFO: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO: Application startup complete.
+```
 
-The application will start on `http://127.0.0.1:8000`.
+### Where is the output shown?
 
-- **Interactive Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **ReDoc UI**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-- **Health Check**: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+Open your web browser and visit:
 
----
+1. **Interactive Web UI**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+   - You will see the **Library Management System Dashboard**.
+   - You can fill out the form to **Add a book**, search the collection live using the **Search bar**, and click **"Check Out"** to decrement copies or **"Delete"** to remove books.
+   - Any validation error (e.g. invalid ISBN, future year, checking out 0 copies) is visibly shown in an alert banner.
 
-## API Documentation & Endpoints
+2. **Interactive Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+   - Complete OpenAPI interactive documentation where you can execute every REST API endpoint directly from your browser.
 
-### 1. Catalog / Books (`/api/books`)
-
-| Method | Endpoint | Description | Status Code |
-|---|---|---|---|
-| `POST` | `/api/books/` | Add a new book to the catalog | `201 Created` |
-| `GET` | `/api/books/` | List books (supports `search`, `category`, pagination) | `200 OK` |
-| `GET` | `/api/books/{id}` | Get book details by ID | `200 OK` |
-| `PUT` | `/api/books/{id}` | Update book information / copies count | `200 OK` |
-| `DELETE` | `/api/books/{id}` | Delete book (forbidden if copies currently loaned) | `200 OK` |
-
-### 2. Members (`/api/members`)
-
-| Method | Endpoint | Description | Status Code |
-|---|---|---|---|
-| `POST` | `/api/members/` | Register a new library member | `201 Created` |
-| `GET` | `/api/members/` | List members with pagination | `200 OK` |
-| `GET` | `/api/members/{id}` | Retrieve member profile | `200 OK` |
-| `PUT` | `/api/members/{id}` | Update member profile / tier / status | `200 OK` |
-| `DELETE` | `/api/members/{id}` | Remove member (forbidden if active loans exist) | `200 OK` |
-| `GET` | `/api/members/{id}/active-loans` | View all active borrowings of a member | `200 OK` |
-
-### 3. Borrowing & Returns (`/api/borrow`)
-
-| Method | Endpoint | Description | Status Code |
-|---|---|---|---|
-| `POST` | `/api/borrow/` | Checkout a book for a member | `201 Created` |
-| `POST` | `/api/borrow/return/{record_id}` | Return book (auto-calculates late fine if overdue) | `200 OK` |
-| `GET` | `/api/borrow/records` | Query borrow transactions (filter by member/book/status) | `200 OK` |
-| `GET` | `/api/borrow/records/{record_id}` | Retrieve specific borrow transaction details | `200 OK` |
+3. **Raw JSON System Info**: [http://127.0.0.1:8000/api/info](http://127.0.0.1:8000/api/info)
+   - Outputs API health and architectural metadata.
 
 ---
 
-## Core Business Rules
+## Running the Swap Test (Data Layer Independence)
 
-1. **Inventory & Availability**:
-   - Initial `available_copies` equals `total_copies`.
-   - Checkout is rejected if `available_copies <= 0` (`BookNotAvailableError` -> HTTP 400).
-   - Available copies are automatically decremented on borrow and incremented on return.
-   - Total copies cannot be reduced below currently borrowed copy count.
-   - Books with active loans cannot be deleted (`BookHasActiveLoansError` -> HTTP 400).
+To prove that the Business Logic Tier is completely independent of the storage layer, run the included `swap_test.py`:
 
-2. **Membership Limits**:
-   - `STUDENT`: Default maximum of **3** concurrent books.
-   - `FACULTY`: Default maximum of **10** concurrent books.
-   - `GENERAL`: Default maximum of **2** concurrent books.
-   - Active borrows are validated before checkout; exceeds limit raises `BorrowLimitExceededError` (HTTP 400).
-   - Inactive accounts cannot borrow books (`MemberInactiveError` -> HTTP 400).
-   - Members with unreturned books cannot be deactivated or deleted.
+```bash
+python swap_test.py
+```
 
-3. **Due Dates & Late Fines**:
-   - Default borrowing window is **14 days** (customizable per checkout).
-   - Overdue calculation: `overdue_days = (return_date - due_date).days`.
-   - Late fee rate is **$1.00 / day** overdue.
-   - Returns on or before due date accrue **$0.00** in fines.
+### What happens during the Swap Test?
+1. The script runs an identical series of business operations against **Data Layer V1 (SQLite)**.
+2. The script runs the exact same business operations against **Data Layer V2 (Pure In-Memory List)**.
+3. It compares all outputs side-by-side and verifies that **both data layers produce 100% identical results** with **zero changes to the Business Logic tier**.
+
+### Swap Test Terminal Output:
+```text
+=================================================================
+      DATA LAYER SWAP TEST: SQLITE vs IN-MEMORY LIST
+=================================================================
+
+-----------------------------------------------------------
+  RUNNING SCENARIO WITH: [DATA LAYER V1: SQLite Engine]
+-----------------------------------------------------------
+[OK] Added Book 1: 'Clean Code', Qty=2
+[OK] Added Book 2: 'The Mythical Man-Month', Qty=1
+[OK] Total Books in collection: 2
+[OK] Search 'brooks' found: ['The Mythical Man-Month']
+[OK] Checked out 'Clean Code': Quantity decreased to 1
+[OK] Checked out 'Clean Code': Quantity decreased to 0
+[OK] Enforced Business Rule: Cannot check out 'Clean Code'; quantity is already 0 (out of stock).
+[OK] Updated 'The Mythical Man-Month' quantity to: 5
+[OK] Deleted Book 2. Remaining books: 1
+
+-----------------------------------------------------------
+  RUNNING SCENARIO WITH: [DATA LAYER V2: Pure In-Memory List]
+-----------------------------------------------------------
+[OK] Added Book 1: 'Clean Code', Qty=2
+[OK] Added Book 2: 'The Mythical Man-Month', Qty=1
+[OK] Total Books in collection: 2
+[OK] Search 'brooks' found: ['The Mythical Man-Month']
+[OK] Checked out 'Clean Code': Quantity decreased to 1
+[OK] Checked out 'Clean Code': Quantity decreased to 0
+[OK] Enforced Business Rule: Cannot check out 'Clean Code'; quantity is already 0 (out of stock).
+[OK] Updated 'The Mythical Man-Month' quantity to: 5
+[OK] Deleted Book 2. Remaining books: 1
+
+=================================================================
+  COMPARING RESULTS ACROSS BOTH DATA LAYERS
+=================================================================
+Operation Metric             | SQLite Layer   | In-Memory List | Identical?
+---------------------------------------------------------------------------
+initial_count                | 2              | 2              | YES
+search_match_title           | The Mythical Man-Month | The Mythical Man-Month | YES
+b1_final_quantity            | 0              | 0              | YES
+out_of_stock_handled         | True           | True           | YES
+final_count_after_delete     | 1              | 1              | YES
+---------------------------------------------------------------------------
+
+[SUCCESS] SWAP TEST PASSED!
+Both Data Layers produced 100% IDENTICAL business outcomes.
+The Business Logic Tier required ZERO code modifications.
+```
 
 ---
 
-## Running Automated Tests
+## Running Automated Unit & Integration Tests
 
-A comprehensive test suite is included in `/tests` covering all three tiers:
-- **Data Tier**: Tests repository CRUD operations and database constraints.
-- **Business Tier**: Tests domain policies, limits, stock checks, and fine calculations.
-- **Presentation Tier**: Tests FastAPI HTTP routing, status codes, and JSON serialization.
-
-Run the test suite:
+Execute the test suite with Pytest:
 ```bash
 python -m pytest -v tests/
 ```
 
-### Test Results Output:
-```text
-tests/test_business_layer.py::TestBookService::test_add_book_success PASSED
-tests/test_business_layer.py::TestBookService::test_add_duplicate_isbn_raises PASSED
-tests/test_business_layer.py::TestBookService::test_add_book_invalid_copies_raises PASSED
-tests/test_business_layer.py::TestBookService::test_cannot_delete_book_with_active_loans PASSED
-tests/test_business_layer.py::TestMemberService::test_register_member_success PASSED
-tests/test_business_layer.py::TestMemberService::test_register_duplicate_email_raises PASSED
-tests/test_business_layer.py::TestMemberService::test_invalid_email_raises PASSED
-tests/test_business_layer.py::TestMemberService::test_cannot_deactivate_member_with_active_loans PASSED
-tests/test_business_layer.py::TestBorrowService::test_borrow_success_decrements_copies PASSED
-tests/test_business_layer.py::TestBorrowService::test_borrow_zero_copies_raises PASSED
-tests/test_business_layer.py::TestBorrowService::test_borrow_exceeds_limit_raises PASSED
-tests/test_business_layer.py::TestBorrowService::test_return_book_on_time_zero_fine PASSED
-tests/test_business_layer.py::TestBorrowService::test_return_book_overdue_calculates_fine PASSED
-tests/test_business_layer.py::TestBorrowService::test_return_already_returned_raises PASSED
-tests/test_data_layer.py::TestBookRepository::test_add_and_get_book PASSED
-tests/test_data_layer.py::TestBookRepository::test_list_books_search PASSED
-tests/test_data_layer.py::TestBookRepository::test_delete_book PASSED
-tests/test_data_layer.py::TestMemberRepository::test_add_and_get_member PASSED
-tests/test_data_layer.py::TestMemberRepository::test_update_member PASSED
-tests/test_data_layer.py::TestBorrowRepository::test_borrow_record_lifecycle PASSED
-tests/test_presentation_layer.py::TestPresentationLayer::test_root_and_health PASSED
-tests/test_presentation_layer.py::TestPresentationLayer::test_book_crud_endpoints PASSED
-tests/test_presentation_layer.py::TestPresentationLayer::test_member_crud_endpoints PASSED
-tests/test_presentation_layer.py::TestPresentationLayer::test_borrow_and_return_endpoints PASSED
+### Test Suite Breakdown:
+- **`tests/test_business_mock.py` (9 tests)**: Mandatory requirement: Unit tests for the Business Logic tier using a **fake/mock data source** (`InMemoryBookRepository`) that **does NOT hit a real database**.
+- **`tests/test_data_layer.py` (4 tests)**: Tests the SQLite `BookRepository` CRUD operations in isolation.
+- **`tests/test_presentation_layer.py` (3 tests)**: Integration tests testing REST endpoints, Web UI status, and error status code mappings via `TestClient`.
+- **`tests/test_swap.py` (1 test)**: Automated pytest validation of the data layer swap.
 
-======================== 24 passed in 1.62s ========================
+### Test Results:
+```text
+tests/test_business_mock.py::test_mock_add_book_success PASSED           [  5%]
+tests/test_business_mock.py::test_mock_rule1_title_and_author_cannot_be_empty PASSED [ 11%]
+tests/test_business_mock.py::test_mock_rule2_publication_year_not_in_future PASSED [ 17%]
+tests/test_business_mock.py::test_mock_rule3_isbn_must_be_10_or_13_digits PASSED [ 23%]
+tests/test_business_mock.py::test_mock_rule4_quantity_cannot_be_negative PASSED [ 29%]
+tests/test_business_mock.py::test_mock_rule5_checkout_fails_when_quantity_is_zero PASSED [ 35%]
+tests/test_business_mock.py::test_mock_checkout_decreases_quantity_by_one PASSED [ 41%]
+tests/test_business_mock.py::test_mock_duplicate_isbn_rejected PASSED    [ 47%]
+tests/test_business_mock.py::test_mock_search_books_partial_match PASSED [ 52%]
+tests/test_data_layer.py::TestBookRepository::test_add_and_get_book PASSED [ 58%]
+tests/test_data_layer.py::TestBookRepository::test_search_books_by_title_and_author PASSED [ 64%]
+tests/test_data_layer.py::TestBookRepository::test_update_book PASSED    [ 70%]
+tests/test_data_layer.py::TestBookRepository::test_delete_book PASSED    [ 76%]
+tests/test_presentation_layer.py::TestPresentationLayer::test_root_ui_and_system_endpoints PASSED [ 82%]
+tests/test_presentation_layer.py::TestPresentationLayer::test_book_crud_and_checkout_lifecycle PASSED [ 88%]
+tests/test_presentation_layer.py::TestPresentationLayer::test_presentation_validation_error_responses PASSED [ 94%]
+tests/test_swap.py::test_swap_data_layer_identical_behavior PASSED       [100%]
+
+======================== 17 passed in 1.17s ========================
 ```
 
 ---
 
-## Submission Compliance
+## API Reference
 
-| Required Element | Implementation in Repository | Status |
-|---|---|---|
-| `/presentation` folder | [presentation/](presentation/) containing routes, schemas, and main FastAPI app | Completed |
-| `/business` folder | [business/](business/) containing domain services, policies, and domain exceptions | Completed |
-| `/data` folder | [data/](data/) containing SQLAlchemy models, database session, and repositories | Completed |
-| `/tests` folder | [tests/](tests/) with 24 unit & integration tests covering all 3 tiers | Completed |
-| `README.md` | Comprehensive setup, architecture, and API documentation | Completed |
-| Architecture diagram | [architecture_diagram.md](architecture_diagram.md) and [architecture_diagram.png](architecture_diagram.png) | Completed |
-| Tech Stack | Python 3.10+ and FastAPI | Completed |
+All REST endpoints reside under the `/api/books` path:
+
+| Method | Endpoint | Description | Status Code |
+|---|---|---|---|
+| `POST` | `/api/books/` | Add a new book (validates title, author, ISBN, year, quantity) | `201 Created` |
+| `GET` | `/api/books/` | View all books in collection | `200 OK` |
+| `GET` | `/api/books/?query={term}` | Search books by title or author (partial match) | `200 OK` |
+| `GET` | `/api/books/{id}` | View single book details by ID | `200 OK` |
+| `PUT` | `/api/books/{id}` | Edit any field of an existing book | `200 OK` |
+| `DELETE` | `/api/books/{id}` | Remove a book by ID | `200 OK` |
+| `POST` | `/api/books/{id}/checkout` | Check out a book (decreases quantity by 1) | `200 OK` |
+
+---
+
+## Submission Checklist Compliance
+
+- [x] **Source code organized into 3 folders**: `/presentation`, `/business`, `/data`.
+- [x] **Short architecture diagram**: Available in [architecture_diagram.md](architecture_diagram.md) and [architecture_diagram.png](architecture_diagram.png).
+- [x] **README.md**: Includes instructions to run, tier descriptions, and design decision justification paragraph.
+- [x] **At least 5 unit tests for Business Logic tier with fake/mock data source**: 9 unit tests in [tests/test_business_mock.py](tests/test_business_mock.py) using `InMemoryBookRepository` (no real database).
+- [x] **Swap Test**: Implemented in [swap_test.py](swap_test.py) and [tests/test_swap.py](tests/test_swap.py) comparing SQLite vs In-Memory List.
+- [x] **Zero layer violations**: Presentation never queries DB; Business tier never imports DB; Data tier has no validation or display logic.

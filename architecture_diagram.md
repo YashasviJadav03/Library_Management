@@ -1,140 +1,104 @@
-# Architecture Diagram & Design Document
+# 3-Tier Architecture Diagram & Specification
 
-## 1. 3-Tier Architectural Overview
+## 1. Overview of the 3-Tier Architecture
 
-The **Library Management System** is designed strictly adhering to the classic **3-Tier / N-Tier Architecture** pattern. This enforces loose coupling, high cohesion, clear separation of concerns, and ease of maintainability.
+The **Library Management Application** strictly enforces separation of concerns across three decoupled tiers:
 
-```
-+-----------------------------------------------------------------------------+
-|                           PRESENTATION TIER (/presentation)                 |
-|                                                                             |
-|  +--------------------+   +----------------------+   +-------------------+  |
-|  |  Book API Routes   |   |  Member API Routes   |   | Borrow API Routes |  |
-|  |  (/api/books)      |   |  (/api/members)      |   | (/api/borrow)     |  |
-|  +---------+----------+   +----------+-----------+   +---------+---------+  |
-|            |                         |                         |            |
-|            +-------------------------+-------------------------+            |
-|                                      |                                      |
-|                  Request Validation & Serialization (Pydantic DTOs)         |
-|                  HTTP Exception Mapping & Status Codes (400, 404, 409)      |
-+--------------------------------------|--------------------------------------+
-                                       | Dependency Injection (Calls Service API)
-                                       v
-+-----------------------------------------------------------------------------+
-|                            BUSINESS TIER (/business)                        |
-|                                                                             |
-|  +--------------------+   +----------------------+   +-------------------+  |
-|  |    BookService     |   |    MemberService     |   |   BorrowService   |  |
-|  +--------------------+   +----------------------+   +-------------------+  |
-|  * ISBN Uniqueness        * Email Validation         * Checkout Limit Rule  |
-|  * Catalog Constraints    * Membership Tier Quotas   * Stock Decrement      |
-|  * Active Loan Checks     * Account Lifecycle        * Late Fee Fine Calc   |
-|                                                                             |
-|  Domain Exceptions: LibraryDomainException, BookNotAvailableError, etc.      |
-+--------------------------------------|--------------------------------------+
-                                       | Uses Repositories (ORM Independent)
-                                       v
-+-----------------------------------------------------------------------------+
-|                              DATA TIER (/data)                              |
-|                                                                             |
-|  +--------------------+   +----------------------+   +-------------------+  |
-|  |   BookRepository   |   |   MemberRepository   |   | BorrowRepository  |  |
-|  +---------+----------+   +----------+-----------+   +---------+---------+  |
-|            |                         |                         |            |
-|  +---------v----------+   +----------v-----------+   +---------v---------+  |
-|  |     Book Model     |   |     Member Model     |   | BorrowRecord Model|  |
-|  +--------------------+   +----------------------+   +-------------------+  |
-|                                                                             |
-|               SQLAlchemy Session Management / Connection Engine             |
-+--------------------------------------|--------------------------------------+
-                                       | SQL / Transactions
-                                       v
-+-----------------------------------------------------------------------------+
-|                               DATABASE ENGINE                               |
-|                                 SQLite (.db)                                |
-+-----------------------------------------------------------------------------+
+```text
++-----------------------------------------------------------------------------------+
+|                        1. PRESENTATION TIER (/presentation)                       |
+|                                                                                   |
+|  * Interactive Web UI (HTML / CSS / Vanilla JavaScript) at http://localhost:8000/ |
+|  * Interactive Swagger API Documentation at http://localhost:8000/docs           |
+|  * FastAPI REST API Routers (/api/books)                                          |
+|  * Pydantic DTO Schemas (BookCreate, BookUpdate, BookResponse)                    |
+|  * Global Exception Handlers (translates domain errors into 400, 404, 409 HTTP)   |
+|  * STRICT RULE: Handles I/O only. No business logic. No direct database calls.    |
++-----------------------------------------+-----------------------------------------+
+                                          | Calls Service methods (DTO payloads)
+                                          v
++-----------------------------------------------------------------------------------+
+|                         2. BUSINESS TIER (/business)                              |
+|                                                                                   |
+|  * BookService (Domain orchestration & business rule enforcement)                 |
+|  * Business Rules Enforced:                                                       |
+|      - Title and Author cannot be empty                                           |
+|      - Publication Year must be valid (not in the future)                         |
+|      - ISBN must be exactly 10 or 13 digits                                       |
+|      - Quantity cannot be negative                                                |
+|      - Book cannot be checked out if quantity is 0 (raises OutOfStockError)       |
+|  * Pure Domain Exceptions (ValidationError, BookNotFoundError, OutOfStockError)   |
+|  * STRICT RULE: Depends ONLY on IBookRepository abstraction. Never imports DB.    |
++-----------------------------------------+-----------------------------------------+
+                                          | Calls IBookRepository interface
+                                          v
++-----------------------------------------------------------------------------------+
+|                           3. DATA TIER (/data)                                    |
+|                                                                                   |
+|  * IBookRepository (Abstract Base Class / Interface)                              |
+|  * Implementation A: BookRepository (SQLAlchemy ORM + SQLite database)            |
+|  * Implementation B: InMemoryBookRepository (Pure Python in-memory list/dict)     |
+|  * ORM Model: Book (id, title, author, isbn, publication_year, quantity)          |
+|  * STRICT RULE: Performs data read/write only. No validation or display logic.    |
++-----------------------------------------+-----------------------------------------+
+                                          | SQL queries / In-memory operations
+                                          v
++-----------------------------------------------------------------------------------+
+|                               STORAGE MEDIUM                                      |
+|            SQLite Database (library.db)  OR  In-Memory Data Store                 |
++-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Layer Responsibilities & Isolation Rules
+## 2. Tier Separation & Communication Matrix
 
-| Layer | Directory | Responsibilities | Inbound Dependencies | Outbound Dependencies |
+| Tier | Directory | Allowed Inputs | Allowed Outputs | Prohibited Actions |
 |---|---|---|---|---|
-| **Presentation Tier** | `/presentation` | HTTP REST endpoints, URL routing, query parsing, request/response validation (Pydantic), error status code mapping | External HTTP Clients / Browsers | Business Services |
-| **Business Tier** | `/business` | Domain logic, validation rules (limits, due dates, fines), workflow orchestration, pure Python domain exceptions | Presentation Tier | Data Repositories & Models |
-| **Data Tier** | `/data` | Database connectivity, SQLAlchemy ORM entities, SQL persistence, transactional CRUD queries (Repository Pattern) | Business Tier | SQLite Database |
+| **Presentation** | `/presentation` | HTTP requests from browser/client | HTTP responses, JSON, HTML | **NO** SQL queries, **NO** business validation rules |
+| **Business** | `/business` | Method calls from Presentation tier | Domain objects, custom domain exceptions | **NO** HTTP imports, **NO** direct DB calls, depends on `IBookRepository` only |
+| **Data** | `/data` | Method calls from Business tier via `IBookRepository` | Entities (Book), raw query results | **NO** business rule validation, **NO** knowledge of how data is rendered |
 
 ---
 
-## 3. Transaction Workflow: Book Checkout (Borrow)
+## 3. Data Flow: "Check Out a Book" Transaction
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as HTTP Client (User / Frontend)
-    participant Pres as Presentation Tier (/presentation)<br/>borrow_routes.py
-    participant Biz as Business Tier (/business)<br/>BorrowService
-    participant Data as Data Tier (/data)<br/>Repositories & SQLite
+    actor User as User (Browser / API Client)
+    participant Pres as Presentation Tier (/presentation)<br/>book_routes.py
+    participant Biz as Business Tier (/business)<br/>BookService
+    participant Repo as Data Tier (/data)<br/>IBookRepository
+    participant DB as SQLite DB / Memory List
 
-    Client->>Pres: POST /api/borrow (member_id, book_id, loan_days)
-    Pres->>Pres: Validate payload schema (BorrowRequest DTO)
-    Pres->>Biz: borrow_book(member_id, book_id, loan_days)
+    User->>Pres: POST /api/books/{id}/checkout
+    Pres->>Biz: checkout_book(book_id)
+    Biz->>Repo: get_by_id(book_id)
+    Repo->>DB: Query book by ID
+    DB-->>Repo: Book record
+    Repo-->>Biz: Book entity
     
-    Biz->>Data: member_repo.get_by_id(member_id)
-    Data-->>Biz: Member entity
-    Biz->>Biz: Check member is active
-
-    Biz->>Data: borrow_repo.get_active_borrows_by_member(member_id)
-    Data-->>Biz: Active loans list
-    Biz->>Biz: Verify active_count < max_borrow_limit
-
-    Biz->>Data: book_repo.get_by_id(book_id)
-    Data-->>Biz: Book entity
-    Biz->>Biz: Verify available_copies > 0
-
-    Biz->>Data: book.available_copies -= 1 (update)
-    Biz->>Data: borrow_repo.add(BorrowRecord)
-    Data-->>Biz: Persisted BorrowRecord
-
-    Biz-->>Pres: Return domain BorrowRecord
-    Pres->>Pres: Serialize to BorrowRecordResponse DTO
-    Pres-->>Client: HTTP 201 Created (JSON body)
+    alt Book not found
+        Biz-->>Pres: Raise BookNotFoundError
+        Pres-->>User: HTTP 404 Not Found
+    else Book quantity == 0
+        Biz-->>Pres: Raise OutOfStockError ("Cannot check out; quantity is 0")
+        Pres-->>User: HTTP 400 Bad Request ("Meaningful error message")
+    else Book quantity > 0
+        Biz->>Biz: book.quantity -= 1
+        Biz->>Repo: update(book)
+        Repo->>DB: Save updated quantity
+        DB-->>Repo: Commit OK
+        Repo-->>Biz: Updated Book
+        Biz-->>Pres: Return Book entity
+        Pres-->>User: HTTP 200 OK (Updated Book JSON / UI updated)
+    end
 ```
 
 ---
 
-## 4. Transaction Workflow: Book Return & Fine Calculation
+## 4. Design Decision: Repository Pattern for Swappable Storage
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client as HTTP Client
-    participant Pres as Presentation Tier (/presentation)<br/>borrow_routes.py
-    participant Biz as Business Tier (/business)<br/>BorrowService
-    participant Data as Data Tier (/data)<br/>Repositories & SQLite
-
-    Client->>Pres: POST /api/borrow/return/{record_id}
-    Pres->>Biz: return_book(record_id, return_time)
-    Biz->>Data: borrow_repo.get_by_id(record_id)
-    Data-->>Biz: BorrowRecord
-
-    Biz->>Biz: Validate record.status == BORROWED
-    Biz->>Biz: If return_date > due_date: fine = overdue_days * $1.00 / day
-    Biz->>Biz: Set record.status = RETURNED, record.fine_amount = fine
-
-    Biz->>Data: book.available_copies += 1 (update)
-    Biz->>Data: borrow_repo.update(record)
-    Data-->>Biz: Updated BorrowRecord
-
-    Biz-->>Pres: Return updated domain record
-    Pres-->>Client: HTTP 200 OK (record with return_date & fine_amount)
-```
-
----
-
-## 5. Architectural Isolation Highlights
-
-1. **Independent Testing**: Each tier is unit tested in isolation (`test_data_layer.py`, `test_business_layer.py`, `test_presentation_layer.py`).
-2. **Framework Agnostic Business Rules**: The business services do not import `fastapi` or `Request`/`Response` objects. If the presentation tier changes (e.g. CLI, gRPC, GraphQL), the business tier remains untouched.
-3. **Database Independence**: The repository abstraction decouples the storage implementation from business consumers.
+> **Design Decision Justification:**  
+> We introduced the `IBookRepository` abstract interface in the Data Tier to invert dependencies (`Dependency Inversion Principle`). By having the `BookService` depend solely on the abstract interface rather than a concrete SQLite or SQLAlchemy session, we achieved true loose coupling. This allowed us to build two swappable data layers—`BookRepository` (SQLite) and `InMemoryBookRepository` (in-memory list)—and run unit tests with 100% mocked data and zero database dependencies. The accompanying `swap_test.py` proves that the business logic behaves identically across both implementations without modifying a single line of business tier code.

@@ -1,6 +1,6 @@
 """
 Pytest configuration and shared fixtures for unit and integration testing.
-Uses an in-memory SQLite database isolated per test.
+Uses an in-memory SQLite database with StaticPool so all test connections share tables.
 """
 import pytest
 from sqlalchemy import create_engine
@@ -9,10 +9,9 @@ from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
 from data.database import Base, get_db
-from data.models import Book, Member, MembershipType
+from data.models import Book
 from presentation.main import app
 
-# In-memory SQLite database with StaticPool so all connections share the same memory DB
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
 
 test_engine = create_engine(
@@ -25,7 +24,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_
 
 @pytest.fixture(scope="function")
 def db_session():
-    """Provides a fresh database session with newly created tables for each test."""
+    """Provides a fresh isolated database session with created tables."""
     Base.metadata.create_all(bind=test_engine)
     session = TestingSessionLocal()
     try:
@@ -37,7 +36,7 @@ def db_session():
 
 @pytest.fixture(scope="function")
 def client(db_session):
-    """FastAPI TestClient with overridden DB dependency pointing to in-memory database."""
+    """FastAPI TestClient with overridden DB dependency."""
     def override_get_db():
         try:
             yield db_session
@@ -52,32 +51,15 @@ def client(db_session):
 
 @pytest.fixture
 def sample_book(db_session):
-    """Creates and returns a sample book entity."""
+    """Creates a sample book entity in the test database."""
     book = Book(
-        isbn="9780132350884",
         title="Clean Code",
         author="Robert C. Martin",
-        category="Software Engineering",
-        total_copies=3,
-        available_copies=3,
+        isbn="9780132350884",
+        publication_year=2008,
+        quantity=3,
     )
     db_session.add(book)
     db_session.commit()
     db_session.refresh(book)
     return book
-
-
-@pytest.fixture
-def sample_member(db_session):
-    """Creates and returns a sample student member entity."""
-    member = Member(
-        name="John Doe",
-        email="john.doe@example.com",
-        membership_type=MembershipType.STUDENT,
-        max_borrow_limit=3,
-        is_active=True,
-    )
-    db_session.add(member)
-    db_session.commit()
-    db_session.refresh(member)
-    return member
